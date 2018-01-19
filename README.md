@@ -38,14 +38,14 @@ Implements the SHA-2 family of cryptographic hash functions designed by the US N
 using namespace crypto;
 
 // hash strings
-Number<224> digest1 = hasher::sha<256, 224>("Hello World!");
-Number<256> digest2 = hasher::sha<256>("Hello World!");
-Number<384> digest3 = hasher::sha<512, 384>("Hello World!");
-Number<512> digest4 = hasher::sha<512>("Hello World!");
+Number<224> digest1 = sha<256, 224>("Hello World!");
+Number<256> digest2 = sha<256>("Hello World!");
+Number<384> digest3 = sha<512, 384>("Hello World!");
+Number<512> digest4 = sha<512>("Hello World!");
 
 // hash structures
 SomeStruct  object{0, 1, 200};
-Number<512> digest5 = hasher::sha<512>(object);
+Number<512> digest5 = sha<512>(object);
 
 // hash iteratively
 hasher::SHA<512, 384> hasher;
