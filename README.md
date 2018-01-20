@@ -1,10 +1,10 @@
 # Crypto
 
-Small, fast, header only, completely independent cryptographic library written in C++17.
+Small, fast, header only, zero dependency cryptographic library written in C++17.
 
 ## Primitives
 
-### crypto::Number
+### Number
 
 Implements a binned unsigned integer of fixed width. For example:
 
@@ -17,7 +17,7 @@ typedef Number<256, uint16_t> uint256_t; // 256 bits divided into 16 uint16_t bi
 typedef Number<256, uint32_t> uint256_t; // 256 bits divided into 8 uint32_t bins
 ```
 
-### crypto::String
+### String
 
 An alias for std::basic_string. The following holds:
 
@@ -29,7 +29,7 @@ String<>        string; // is std::string
 
 ## Hashers
 
-### crypto::hasher::SHA
+### SHA
 
 Implements the SHA-2 family of cryptographic hash functions designed by the US National Security Agency. Supports the following variants: SHA256/224, SHA256, SHA512/224, SHA512/256, SHA512/384, SHA512.
 
@@ -61,7 +61,7 @@ Number<384> digest = hasher.digest();
 
 This algorithm is verified and benchmarked against OpenSSL implementation of SHA-2.
 
-### crypto::hasher::RMD
+### RMD
 
 Coming next.
 
