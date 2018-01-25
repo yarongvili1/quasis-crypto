@@ -24,269 +24,214 @@
  */
 
 #pragma once
-#include "../number.h"
-#include "../string.h"
+#include "../hasher.h"
 
 namespace crypto
 {
-    template<size_t BASE> auto
+    template<size_t BITS> auto
     rmd(const void *record, const size_t &length)
     {
-        return hasher::RMD<BASE>().update(record, length).digest();
+        return hasher::RMD<BITS>().update(record, length).digest();
     }
 
 
-    template<size_t BASE, size_t length> auto
+    template<size_t BITS, size_t length> auto
     rmd(const Number<length> &number)
     {
-        return rmd<BASE>(number.data(), number.size());
+        return rmd<BITS>(number.data(), number.size());
     }
 
 
-    template<size_t BASE, class char_t> auto
+    template<size_t BITS, class char_t> auto
     rmd(const String<char_t> &string)
     {
-        return rmd<BASE>(string.data(), string.size());
+        return rmd<BITS>(string.data(), string.size());
     }
 
 
-    template<size_t BASE, class data_t> auto
+    template<size_t BITS> auto
+    rmd(const char *string)
+    {
+        return rmd<BITS>((void*)(string), strlen(string));
+    }
+
+
+    template<size_t BITS, class data_t> auto
     rmd(const data_t &object)
     {
-        return rmd<BASE>((void*)&object, sizeof(data_t));
+        return rmd<BITS>((void*)&object, sizeof(data_t));
     }
 
 
     namespace hasher
     {
-        template<size_t BASE>
-        class RMD
+        template<size_t BITS>
+        class RMD : public Hasher<BITS, BITS>
         {
-            typedef uint8_t  byte_t;
-            typedef uint32_t word_t;
+            template<size_t> struct Option;
 
-            Number<BASE, word_t>              hash;
-            Number<ATOM, byte_t>              atom;
-            size_t                            offs;
-            size_t                            size;
+            template<> struct Option<160>
+            {
+                enum  : size_t
+                {
+                    STATES =  5,
+                    BLOCKS = 16,
+                    ROUNDS = 10,
+                };
+
+                typedef uint8_t  byte_t;
+                typedef uint32_t word_t;
+                typedef uint64_t long_t;
+            };
+
+
+            typedef typename Option<BITS>     option;
+            typedef typename option::byte_t   byte_t;
+            typedef typename option::word_t   word_t;
+            typedef typename option::long_t   long_t;
+
+            enum  : size_t
+            {
+                WORD_BIT = sizeof(word_t) * CHAR_BIT,
+                STATES   =            option::STATES,
+                BLOCKS   =            option::BLOCKS,
+                ROUNDS   =            option::ROUNDS,
+            };
+
+            Number<STATES * WORD_BIT, word_t> m_hash;
+            Number<BLOCKS * WORD_BIT, byte_t> m_data;
+
 
         public:
 
-            static const Number<BASE, word_t> SEED;
-            static const Number<ITER, word_t> SALT;
+            static const Number<STATES * WORD_BIT, word_t> SEED;
+            static const Number<ROUNDS * WORD_BIT, word_t> SALT;
+            static const int               OFFS[ROUNDS][BLOCKS];
+            static const int               SIZE[ROUNDS][BLOCKS];
 
 
-            RMD() : hash{RMD::SEED}, offs(0), size(0)
+            RMD() : Hasher(), m_hash{RMD::SEED}, m_data{}
             {
             }
 
 
            ~RMD()
             {
-                this->size = this->offs = 0;
             }
 
 
-            RMD&
-            update(const void *record, const size_t &length)
+            const byte_t*
+            hash() const
             {
-                return this->insert((byte_t*)record, length);
+                return (byte_t*)(this->m_hash.data());
             }
 
-
-            template<size_t length> RMD&
-            update(const Number<length> &number)
-            {
-                return update(number.data(), number.size());
-            }
-
-
-            template<class char_t> RMD&
-            update(const String<char_t> &string)
-            {
-                return update(string.data(), string.size());
-            }
-
-
-            template<class data_t> RMD&
-            update(const data_t &object)
-            {
-                return update((void*)&object, sizeof(data_t));
-            }
-
-
-            Number<SIZE>
-            digest()
-            {
-                return this->offs == BASE ? this->hash : finish();
-            }
-
-
-        private:
 
             byte_t*
-            front()
+            data()
             {
-                return std::addressof(this->atom[this->offs]);
+                return (byte_t*)(this->m_data.data());
+            }
+
+
+            const byte_t*
+            data() const
+            {
+                return (byte_t*)(this->m_data.data());
             }
 
 
             size_t
             capacity() const
             {
-                return size_t(this->atom.size() - this->offs);
+                return (size_t)(this->m_data.size());
             }
 
 
-            RMD&
-            insert(const byte_t *record, const size_t &length)
-            {
-                size_t  volume, offset = 0, remain = length;
+        protected:
 
-                while ((volume = this->capacity()) <= remain)
+
+            void
+            compress()
+            {
+                Number<STATES * WORD_BIT, word_t> lstate{m_hash};
+                Number<STATES * WORD_BIT, word_t> rstate{m_hash};
+                Number<BLOCKS * WORD_BIT, word_t> blocks{m_data};
+                word_t buffer{};
+
+                for (size_t i = 0; i < BLOCKS; ++i)
                 {
-                    memcpy(this->front(), record + offset, volume);
-                    encode(); remain -= volume; offset += volume;
+                    blocks[i] = h2le(blocks[i]);
                 }
 
-                memcpy(this->front(), record + offset, remain);
-                this->offs += remain; this->size += length;
-                return *this;
-            }
-
-
-            RMD&
-            insert(const size_t &length, const byte_t &record = 0)
-            {
-                size_t  volume, remain = length;
-
-                while ((volume = this->capacity()) <= remain)
-                {
-                    memset(this->front(), record, volume);
-                    this->encode(); remain -= volume;
+                #define RMD160(s, salt, offs, size, oper) \
+                {\
+                    buffer = rotl(s[0] + oper(s[1], s[2], s[3]) + salt + blocks[offs], size);\
+                    s[0]=s[4]; s[4]=s[3]; s[3]=rotl(s[2], 10); s[2]=s[1]; s[1]=s[0] + buffer;\
                 }
 
-                memset(this->front(), record, remain);
-                this->offs += remain; this->size += length;
-                return *this;
+                // loop on the rounds is slow due to boolean operators
+                // the optimizer fails to inline an array of functions
+
+                for (size_t i = 0, j = i + ROUNDS / 2, k = 0; k < BLOCKS; ++k)
+                {
+                    RMD160(lstate, SALT[i], OFFS[i][k], SIZE[i][k], boop150);
+                    RMD160(rstate, SALT[j], OFFS[j][k], SIZE[j][k], boop045);
+                }
+
+                for (size_t i = 1, j = i + ROUNDS / 2, k = 0; k < BLOCKS; ++k)
+                {
+                    RMD160(lstate, SALT[i], OFFS[i][k], SIZE[i][k], boop202);
+                    RMD160(rstate, SALT[j], OFFS[j][k], SIZE[j][k], boop228);
+                }
+
+                for (size_t i = 2, j = i + ROUNDS / 2, k = 0; k < BLOCKS; ++k)
+                {
+                    RMD160(lstate, SALT[i], OFFS[i][k], SIZE[i][k], boop089);
+                    RMD160(rstate, SALT[j], OFFS[j][k], SIZE[j][k], boop089);
+                }
+
+                for (size_t i = 3, j = i + ROUNDS / 2, k = 0; k < BLOCKS; ++k)
+                {
+                    RMD160(lstate, SALT[i], OFFS[i][k], SIZE[i][k], boop228);
+                    RMD160(rstate, SALT[j], OFFS[j][k], SIZE[j][k], boop202);
+                }
+
+                for (size_t i = 4, j = i + ROUNDS / 2, k = 0; k < BLOCKS; ++k)
+                {
+                    RMD160(lstate, SALT[i], OFFS[i][k], SIZE[i][k], boop045);
+                    RMD160(rstate, SALT[j], OFFS[j][k], SIZE[j][k], boop150);
+                }
+
+                #undef RMD160
+
+                buffer    = m_hash[1] + lstate[2] + rstate[3];
+                m_hash[1] = m_hash[2] + lstate[3] + rstate[4];
+                m_hash[2] = m_hash[3] + lstate[4] + rstate[0];
+                m_hash[3] = m_hash[4] + lstate[0] + rstate[1];
+                m_hash[4] = m_hash[0] + lstate[1] + rstate[2];
+                m_hash[0] = buffer;
             }
 
 
             void
-            encode()
+            finalize()
             {
-                Number<BASE, word_t>  digest{this->hash};
-                Number<ITER, word_t>  pseudo{this->atom};
+                const size_t length  =  this->size();
+                this->update(size_t(1), byte_t(0x80));
 
-                for (size_t i = 00U; i < size_t(16U); ++i)
+                if (this->reserve() < sizeof(long_t))
                 {
-                    pseudo[i] = h2be(pseudo[i]);
+                    this->update(this->reserve(), 0x0);
                 }
 
-                for (size_t i = 16U; i < pseudo.bins(); ++i)
+                this->update(reserve() - sizeof(long_t), 0x0);
+                this->update(h2le(long_t(length) * CHAR_BIT));
+
+                for (size_t i = 0; i < STATES; ++i)
                 {
-                    pseudo[i] = pseudo[i-16U] + sigma0(pseudo[i-15U]) + pseudo[i-7U] + sigma1(pseudo[i-2U]);
+                    this->m_hash[i] = le2h(this->m_hash[i]);
                 }
-
-                for (size_t i = 00U; i < pseudo.bins(); ++i)
-                {
-                    word_t t1 = pseudo[i] + RMD<BASE,BASE>::SALT[i] + digest[7U] +
-                                delta1(digest[4U]) + cho3(digest[4U], digest[5U], digest[6U]);
-                    word_t t2 = delta0(digest[0U]) + maj3(digest[0U], digest[1U], digest[2U]);
-
-                    digest[7U] = digest[6U]; digest[6U] = digest[5U];
-                    digest[5U] = digest[4U]; digest[4U] = digest[3U] + t1;
-                    digest[3U] = digest[2U]; digest[2U] = digest[1U];
-                    digest[1U] = digest[0U]; digest[0U] = t1 + t2;
-
-                    //digest.unshift(t1 + t2), digest[4] += t1;
-                }
-
-                for (size_t i = 00U; i < digest.bins(); ++i)
-                {
-                    this->hash[i] += digest[i];
-                }
-
-                this->offs = 0;
-            }
-
-
-            Number<SIZE>
-            finish()
-            {
-                long_t length = h2be(long_t(size) * CHAR_BIT);
-                size_t offset = atom.size( ) - sizeof(long_t);
-
-                if (insert(1, byte_t(0x80)), this->offs > offset)
-                {
-                    this->insert(this->capacity());
-                }
-
-                this->insert(offset - this->offs).update(length);
-
-                for (size_t i = 0U; i < this->hash.bins(); ++i)
-                {
-                    this->hash[i] = be2h(this->hash[i]);
-                }
-
-                this->offs = BASE;
-                return this->hash;
-            }
-
-
-            static uint32_t
-            sigma0(const uint32_t &number)
-            {
-                return rotr(number, 7) ^ rotr(number,18) ^ (number >>  3);
-            }
-
-
-            static uint64_t
-            sigma0(const uint64_t &number)
-            {
-                return rotr(number, 1) ^ rotr(number, 8) ^ (number >>  7);
-            }
-
-
-            static uint32_t
-            sigma1(const uint32_t &number)
-            {
-                return rotr(number,17) ^ rotr(number,19) ^ (number >> 10);
-            }
-
-
-            static uint64_t
-            sigma1(const uint64_t &number)
-            {
-                return rotr(number,19) ^ rotr(number,61) ^ (number >>  6);
-            }
-
-
-            static uint32_t
-            delta0(const uint32_t &number)
-            {
-                return rotr(number, 2) ^ rotr(number,13) ^ rotr(number,22);
-            }
-
-
-            static uint64_t
-            delta0(const uint64_t &number)
-            {
-                return rotr(number,28) ^ rotr(number,34) ^ rotr(number,39);
-            }
-
-
-            static uint32_t
-            delta1(const uint32_t &number)
-            {
-                return rotr(number, 6) ^ rotr(number,11) ^ rotr(number,25);
-            }
-
-
-            static uint64_t
-            delta1(const uint64_t &number)
-            {
-                return rotr(number,14) ^ rotr(number,18) ^ rotr(number,41);
             }
         };
 
@@ -299,10 +244,41 @@ namespace crypto
             0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0,
         };
 
-
         template<>
         decltype(RMD<160>::SALT) RMD<160>::SALT =
         {
+            0x00000000, 0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xA953FD4E,
+            0x50A28BE6, 0x5C4DD124, 0x6D703EF3, 0x7A6D76E9, 0x00000000,
+        };
+
+        template<>
+        decltype(RMD<160>::OFFS) RMD<160>::OFFS =
+        {
+            {  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15 },
+            {  7,  4, 13,  1, 10,  6, 15,  3, 12,  0,  9,  5,  2, 14, 11,  8 },
+            {  3, 10, 14,  4,  9, 15,  8,  1,  2,  7,  0,  6, 13, 11,  5, 12 },
+            {  1,  9, 11, 10,  0,  8, 12,  4, 13,  3,  7, 15, 14,  5,  6,  2 },
+            {  4,  0,  5,  9,  7, 12,  2, 10, 14,  1,  3,  8, 11,  6, 15, 13 },
+            {  5, 14,  7,  0,  9,  2, 11,  4, 13,  6, 15,  8,  1, 10,  3, 12 },
+            {  6, 11,  3,  7,  0, 13,  5, 10, 14, 15,  8, 12,  4,  9,  1,  2 },
+            { 15,  5,  1,  3,  7, 14,  6,  9, 11,  8, 12,  2, 10,  0,  4, 13 },
+            {  8,  6,  4,  1,  3, 11, 15,  0,  5, 12,  2, 13,  9,  7, 10, 14 },
+            { 12, 15, 10,  4,  1,  5,  8,  7,  6,  2, 13, 14,  0,  3,  9, 11 },
+        };
+
+        template<>
+        decltype(RMD<160>::SIZE) RMD<160>::SIZE =
+        {
+            { 11, 14, 15, 12,  5,  8,  7,  9, 11, 13, 14, 15,  6,  7,  9,  8 },
+            {  7,  6,  8, 13, 11,  9,  7, 15,  7, 12, 15,  9, 11,  7, 13, 12 },
+            { 11, 13,  6,  7, 14,  9, 13, 15, 14,  8, 13,  6,  5, 12,  7,  5 },
+            { 11, 12, 14, 15, 14, 15,  9,  8,  9, 14,  5,  6,  8,  6,  5, 12 },
+            {  9, 15,  5, 11,  6,  8, 13, 12,  5, 12, 13, 14, 11,  8,  5,  6 },
+            {  8,  9,  9, 11, 13, 15, 15,  5,  7,  7,  8, 11, 14, 14, 12,  6 },
+            {  9, 13, 15,  7, 12,  8,  9, 11,  7,  7, 12,  7,  6, 15, 13, 11 },
+            {  9,  7, 15, 11,  8,  6,  6, 14, 12, 13,  5, 14, 13, 13,  7,  5 },
+            { 15,  5,  8, 11, 14, 14,  6, 14,  6,  9, 12,  9, 12,  5, 15,  8 },
+            {  8,  5, 12,  9, 12,  5, 14,  6,  8, 13,  6,  5, 15, 13, 11, 11 },
         };
     }
 }

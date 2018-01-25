@@ -30,21 +30,23 @@
 
 namespace crypto
 {
-    template<size_t SIZE, typename word_t = uint8_t>
+    template<size_t BITS, typename word_t = uint8_t>
     class Number
     {
-        enum
+        enum : size_t
         {
-            WORD = CHAR_BIT * sizeof(word_t),
+            WORD_BIT = CHAR_BIT * sizeof(word_t),
+            BINS     = (size_t)(BITS / WORD_BIT),
+            SIZE     = (size_t)(BITS / CHAR_BIT),
         };
 
-        word_t        word[ SIZE / WORD ];
+        word_t              m_data [BINS];
         static inline const Number ZERO{};
 
 
      public:
 
-        Number() : word{}
+        Number() : m_data{}
         {
         }
 
@@ -55,15 +57,22 @@ namespace crypto
         }
 
 
-        template<size_t length, typename type_t>
-        Number(const Number<length, type_t> &number) : word{}
+        Number(const word_t *record, const size_t &length = BINS) : m_data{}
         {
-            memcpy(this->data(), &number, SIZE <= length ? size() : number.size());
+            assert(this->size()       >= length * sizeof(word_t));
+            memcpy(this->data(), record, length * sizeof(word_t));
+        }
+
+
+        template<size_t length, typename type_t>
+        Number(const Number<length, type_t> &number) : m_data{}
+        {
+            memcpy(this->data(), &number, BITS <= length ? size() : number.size());
         }
 
 
         template<class data_t>
-        Number(const data_t &object) : word{}
+        Number(const data_t &object) : m_data{}
         {
             assert(this->size() >= sizeof(data_t));
             memcpy(this->data(), &object, sizeof(data_t));
@@ -71,7 +80,7 @@ namespace crypto
 
 
         template<class char_t = char>
-        Number(const String<char_t> &string, const String<char_t> &format) : Number(from(string, format))
+        Number(const String<char_t> &string, const String<char_t> &format) : Number(decode(string, format))
         {
         }
 
@@ -85,35 +94,35 @@ namespace crypto
         size_t
         bits() const
         {
-            return SIZE;
-        }
-
-
-        size_t
-        size() const
-        {
-            return this->bits() / CHAR_BIT;
+            return BITS;
         }
 
 
         size_t
         bins() const
         {
-            return this->size() / sizeof(word_t);
+            return BINS;
+        }
+
+
+        size_t
+        size() const
+        {
+            return SIZE;
         }
 
 
         word_t*
         data()
         {
-            return this->word;
+            return this->m_data;
         }
 
 
         const word_t*
         data() const
         {
-            return this->word;
+            return this->m_data;
         }
 
 
@@ -123,14 +132,14 @@ namespace crypto
         word_t&
         operator[](const size_t &offset)
         {
-            return this->word[offset];
+            return this->m_data[offset];
         }
 
 
         const word_t&
         operator[](const size_t &offset) const
         {
-            return this->word[offset];
+            return this->m_data[offset];
         }
 
 
@@ -140,12 +149,12 @@ namespace crypto
         Number&
         operator+=(const size_t &rvalue)
         {
-            size_t remain(rvalue);
+            size_t remain = rvalue;
 
             for (size_t i = 0; i < this->bins() && remain; ++i)
             {
-                word[i] = (word_t)(remain += word[i]);
-                remain  = (size_t)(remain >> WORD);
+                m_data[i] = (word_t)(remain += m_data[i]);
+                remain    = (size_t)(remain >> WORD_BIT);
             }
 
             return *this;
@@ -176,9 +185,8 @@ namespace crypto
 
             for (size_t i = 0; i < this->bins(); ++i)
             {
-        	    remain += (rvalue) * this->word[i];
-        	    word[i] = (word_t)(remain);
-	            remain  = (size_t)(remain >> WORD);
+        	    m_data[i] = (word_t)(remain += m_data[i] * rvalue);
+	            remain    = (size_t)(remain >> WORD_BIT);
             }
 
             return *this;
@@ -209,14 +217,14 @@ namespace crypto
 
             for (int i = int(this->bins() - 1); i >= 0; --i)
             {
-                if ((remain <<= WORD) += this->word[i])
+                if ((remain <<= WORD_BIT) += this->m_data[i])
                 {
-                    word[i] = (word_t)(remain / rvalue);
-                    remain  = (size_t)(remain % rvalue);
+                    m_data[i] = (word_t)(remain / rvalue);
+                    remain    = (size_t)(remain % rvalue);
                 }
                 else
                 {
-                    word[i] = 0;
+                    m_data[i] = 0;
                 }
             }
 
@@ -268,6 +276,18 @@ namespace crypto
         }
 
 
+        // ::insert
+
+        void
+        insert(const size_t &offset, const word_t *record, const size_t &length)
+        {
+            memcpy(this->data() + offset, record, length);
+        }
+
+
+        // ::encode
+
+
         template<class char_t = char> String<char_t>
         encode(const String<char_t> &format = BASE16) const
         {
@@ -287,109 +307,29 @@ namespace crypto
         }
 
 
+        // ::decode
+
+
         template<class char_t = char> static Number
-        from(const String<char_t> &string, const String<char_t> &format = BASE16)
+        decode(const String<char_t> &string, const String<char_t> &format = BASE16)
         {
             Number number;
-            size_t digits(format.size()), offset;
 
             for (const auto &lexeme : string)
             {
-                offset = format.find(lexeme);
+                size_t offset = format.find(lexeme);
 
-                if (offset == String<>::npos)
+                if (offset == String<char_t>::npos)
                 {
                     return Number();
                 }
 
-                (number *= digits) += offset;
+                (number *= format.size()) += offset;
             }
 
             return number;
         }
-
-
-        void
-        unshift(const word_t &number)
-        {
-            for (size_t i = this->bins() - 1; i >= 1; --i)
-            {
-                this->word[i] = this->word[i - 1];
-            }
-
-            this->word[0] = number;
-        }
     };
-
-
-    // rotl()
-
-
-    inline uint32_t
-    rotl(const uint32_t &number, const int &length)
-    {
-        #if defined(_WIN32)
-            return _lrotl(number, length);
-        #else
-            return (number << length) | (number >> (32 - length));
-        #endif
-    }
-
-
-    inline uint64_t
-    rotl(const uint64_t &number, const int &length)
-    {
-        #if defined(_WIN32)
-            return _rotl64(number, length);
-        #else
-            return (number << length) | (number >> (64 - length));
-        #endif
-    }
-
-
-    // rotr()
-
-
-    uint32_t
-    rotr(const uint32_t &number, const int &length)
-    {
-        #if defined(_WIN32)
-            return _lrotr(number, length);
-        #else
-            return (number >> length) | (number << (32 - length));
-        #endif
-    }
-
-
-    uint64_t
-    rotr(const uint64_t &number, const int &length)
-    {
-        #if defined(_WIN32)
-            return _rotr64(number, length);
-        #else
-            return (number >> length) | (number << (64 - length));
-        #endif
-    }
-
-
-    // cho3()
-
-
-    template<typename uint_t> uint_t
-    cho3(const uint_t &value1, const uint_t &value2, const uint_t &value3)
-    {
-        return (value1 & (value2 ^ value3)) ^ value3;
-    }
-
-
-    // maj3()
-
-
-    template<typename uint_t> uint_t
-    maj3(const uint_t &value1, const uint_t &value2, const uint_t &value3)
-    {
-        return (value1 & value2) | ((value1 ^ value2) & value3);
-    }
 
 
     // swap()
@@ -441,10 +381,10 @@ namespace crypto
     }
 
 
-    template<size_t SIZE, typename word_t> Number<SIZE, word_t>
-    swap(const Number<SIZE, word_t> &number)
+    template<size_t BITS, typename word_t> Number<BITS, word_t>
+    swap(const Number<BITS, word_t> &number)
     {
-        Number<SIZE, word_t> result;
+        Number<BITS, word_t> result;
 
         for (size_t i = 0; i < number.bins(); ++i)
         {

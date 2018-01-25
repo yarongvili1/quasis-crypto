@@ -61,9 +61,35 @@ Number<384> digest = hasher.digest();
 
 This algorithm is verified and benchmarked against OpenSSL implementation of SHA-2.
 
-### RMD
+### RIPEMD
 
-Coming next.
+Implements the RIPEMD family of cryptographic hash functions developed by the COSIC research group at the Katholieke Universiteit Leuven. Supports one variant: RMD160.
+
+
+```C++
+#include <crypto/hasher/rmd.h>
+using namespace crypto;
+
+// hash strings
+
+Number<160> digest = rmd<160>("Hello World!");
+
+// hash structures
+
+SomeStruct  object{0, 1, 200};
+Number<160> digest = rmd<160>(object);
+
+// hash iteratively
+
+hasher::RMD<160> hasher;
+
+for (size_t i = 0; i < l; ++i)
+    hasher.update(object[i]);
+
+Number<160> digest = hasher.digest();
+```
+
+This algorithm is verified and benchmarked against OpenSSL implementation of RIPEMD.
 
 ## Installation
 

@@ -24,43 +24,49 @@
  */
 
 #pragma once
-#include "../number.h"
-#include "../string.h"
+#include "../hasher.h"
 
 namespace crypto
 {
-    template<size_t BASE, size_t SIZE = BASE> auto
+    template<size_t BITS, size_t VITS = BITS> auto
     sha(const void *record, const size_t &length)
     {
-        return hasher::SHA<BASE,SIZE>().update(record, length).digest();
+        return hasher::SHA<BITS, VITS>().update(record, length).digest();
     }
 
 
-    template<size_t BASE, size_t SIZE = BASE, size_t length> auto
+    template<size_t BITS, size_t VITS = BITS, size_t length> auto
     sha(const Number<length> &number)
     {
-        return sha<BASE,SIZE>(number.data(), number.size());
+        return sha<BITS, VITS>(number.data(), number.size());
     }
 
 
-    template<size_t BASE, size_t SIZE = BASE, class char_t> auto
+    template<size_t BITS, size_t VITS = BITS, class char_t> auto
     sha(const String<char_t> &string)
     {
-        return sha<BASE,SIZE>(string.data(), string.size());
+        return sha<BITS, VITS>(string.data(), string.size());
     }
 
 
-    template<size_t BASE, size_t SIZE = BASE, class data_t> auto
+    template<size_t BITS, size_t VITS = BITS> auto
+    sha(const char *string)
+    {
+        return sha<BITS, VITS>((void*)(string), strlen(string));
+    }
+
+
+    template<size_t BITS, size_t VITS = BITS, class data_t> auto
     sha(const data_t &object)
     {
-        return sha<BASE,SIZE>((void*)&object, sizeof(data_t));
+        return sha<BITS, VITS>((void*)&object, sizeof(data_t));
     }
 
 
     namespace hasher
     {
-        template<size_t BASE, size_t SIZE = BASE>
-        class SHA
+        template<size_t BITS, size_t VITS = BITS>
+        class SHA : public Hasher<BITS, VITS>
         {
             template<size_t> struct Option;
 
@@ -68,8 +74,9 @@ namespace crypto
             {
                 enum  : size_t
                 {
-                    ATOM        = 16 * 4,
-                    ITER        = 64 * 4,
+                    STATES = 16,
+                    BLOCKS = 16,
+                    ROUNDS = 64,
                 };
 
                 typedef uint8_t   byte_t;
@@ -81,8 +88,9 @@ namespace crypto
             {
                 enum  : size_t
                 {
-                    ATOM        = 16 * 8,
-                    ITER        = 80 * 8,
+                    STATES = 16,
+                    BLOCKS = 16,
+                    ROUNDS = 80,
                 };
 
                 typedef uint8_t   byte_t;
@@ -90,183 +98,128 @@ namespace crypto
                 typedef uint128_t long_t;
             };
 
-            typedef typename Option<BASE>   option;
-            typedef typename option::byte_t byte_t;
-            typedef typename option::word_t word_t;
-            typedef typename option::long_t long_t;
+
+            typedef typename Option<BITS>     option;
+            typedef typename option::byte_t   byte_t;
+            typedef typename option::word_t   word_t;
+            typedef typename option::long_t   long_t;
 
             enum  : size_t
             {
-                ATOM     = CHAR_BIT * option::ATOM,
-                ITER     = CHAR_BIT * option::ITER,
+                WORD_BIT = sizeof(word_t) * CHAR_BIT,
+                STATES   =            option::STATES,
+                BLOCKS   =            option::BLOCKS,
+                ROUNDS   =            option::ROUNDS,
             };
 
-            Number<BASE, word_t>              hash;
-            Number<ATOM, byte_t>              atom;
-            size_t                            offs;
-            size_t                            size;
+            Number<STATES * WORD_BIT, word_t> m_hash;
+            Number<BLOCKS * WORD_BIT, byte_t> m_data;
+
 
         public:
 
-            static const Number<BASE, word_t> SEED;
-            static const Number<ITER, word_t> SALT;
+            static const Number<STATES * WORD_BIT, word_t> SEED;
+            static const Number<ROUNDS * WORD_BIT, word_t> SALT;
 
 
-            SHA() : hash{SHA::SEED}, offs(0), size(0)
+            SHA() : Hasher(), m_hash{SHA::SEED}, m_data{}
             {
             }
 
 
            ~SHA()
             {
-                this->size = this->offs = 0;
             }
 
 
-            SHA&
-            update(const void *record, const size_t &length)
+            const byte_t*
+            hash() const
             {
-                return this->insert((byte_t*)record, length);
+                return (byte_t*)(this->m_hash.data());
             }
 
-
-            template<size_t length> SHA&
-            update(const Number<length> &number)
-            {
-                return update(number.data(), number.size());
-            }
-
-
-            template<class char_t> SHA&
-            update(const String<char_t> &string)
-            {
-                return update(string.data(), string.size());
-            }
-
-
-            template<class data_t> SHA&
-            update(const data_t &object)
-            {
-                return update((void*)&object, sizeof(data_t));
-            }
-
-
-            Number<SIZE>
-            digest()
-            {
-                return this->offs == BASE ? this->hash : finish();
-            }
-
-
-        private:
 
             byte_t*
-            front()
+            data()
             {
-                return std::addressof(this->atom[this->offs]);
+                return (byte_t*)(this->m_data.data());
+            }
+
+
+            const byte_t*
+            data() const
+            {
+                return (byte_t*)(this->m_data.data());
             }
 
 
             size_t
             capacity() const
             {
-                return size_t(this->atom.size() - this->offs);
+                return (size_t)(this->m_data.size());
             }
 
 
-            SHA&
-            insert(const byte_t *record, const size_t &length)
-            {
-                size_t  volume, offset = 0, remain = length;
+        protected:
 
-                while ((volume = this->capacity()) <= remain)
+
+            void
+            compress()
+            {
+                Number<STATES * WORD_BIT, word_t> states{m_hash};
+                Number<ROUNDS * WORD_BIT, word_t> rounds{m_data};
+
+                for (size_t i = 0; i < BLOCKS; ++i)
                 {
-                    memcpy(this->front(), record + offset, volume);
-                    encode(); remain -= volume; offset += volume;
+                    rounds[i] = h2be(rounds[i]);
                 }
 
-                memcpy(this->front(), record + offset, remain);
-                this->offs += remain; this->size += length;
-                return *this;
-            }
-
-
-            SHA&
-            insert(const size_t &length, const byte_t &record = 0)
-            {
-                size_t  volume, remain = length;
-
-                while ((volume = this->capacity()) <= remain)
+                for (size_t i = BLOCKS; i < ROUNDS; ++i)
                 {
-                    memset(this->front(), record, volume);
-                    this->encode(); remain -= volume;
+                    rounds[i] = rounds[i-16] + sigma0(rounds[i-15]) + rounds[i-7] + sigma1(rounds[i-2]);
                 }
 
-                memset(this->front(), record, remain);
-                this->offs += remain; this->size += length;
-                return *this;
+                for (size_t i = 0; i < ROUNDS; ++i)
+                {
+                    word_t t0 = delta0(states[0]) + boop232(states[0], states[1], states[2]);
+                    word_t t1 = delta1(states[4]) + boop202(states[4], states[5], states[6])
+                              + states[7] + rounds[i] + SHA<BITS,BITS>::SALT[i];
+
+                    states[7] = states[6];
+                    states[6] = states[5];
+                    states[5] = states[4];
+                    states[4] = states[3] + t1;
+                    states[3] = states[2];
+                    states[2] = states[1];
+                    states[1] = states[0];
+                    states[0] = t1 + t0;
+                }
+
+                for (size_t i = 0; i < STATES; ++i)
+                {
+                    this->m_hash[i] += states[i];
+                }
             }
 
 
             void
-            encode()
+            finalize()
             {
-                Number<BASE, word_t>  digest{this->hash};
-                Number<ITER, word_t>  pseudo{this->atom};
+                const size_t length  =  this->size();
+                this->update(size_t(1), byte_t(0x80));
 
-                for (size_t i = 00U; i < size_t(16U); ++i)
+                if (this->reserve() < sizeof(long_t))
                 {
-                    pseudo[i] = h2be(pseudo[i]);
+                    this->update(this->reserve(), 0x0);
                 }
 
-                for (size_t i = 16U; i < pseudo.bins(); ++i)
+                this->update(reserve() - sizeof(long_t), 0x0);
+                this->update(h2be(long_t(length) * CHAR_BIT));
+
+                for (size_t i = 0; i < STATES; ++i)
                 {
-                    pseudo[i] = pseudo[i-16U] + sigma0(pseudo[i-15U]) + pseudo[i-7U] + sigma1(pseudo[i-2U]);
+                    this->m_hash[i] = be2h(this->m_hash[i]);
                 }
-
-                for (size_t i = 00U; i < pseudo.bins(); ++i)
-                {
-                    word_t t1 = pseudo[i] + SHA<BASE,BASE>::SALT[i] + digest[7U] +
-                                delta1(digest[4U]) + cho3(digest[4U], digest[5U], digest[6U]);
-                    word_t t2 = delta0(digest[0U]) + maj3(digest[0U], digest[1U], digest[2U]);
-
-                    digest[7U] = digest[6U]; digest[6U] = digest[5U];
-                    digest[5U] = digest[4U]; digest[4U] = digest[3U] + t1;
-                    digest[3U] = digest[2U]; digest[2U] = digest[1U];
-                    digest[1U] = digest[0U]; digest[0U] = t1 + t2;
-
-                    //digest.unshift(t1 + t2), digest[4] += t1;
-                }
-
-                for (size_t i = 00U; i < digest.bins(); ++i)
-                {
-                    this->hash[i] += digest[i];
-                }
-
-                this->offs = 0;
-            }
-
-
-            Number<SIZE>
-            finish()
-            {
-                long_t length = h2be(long_t(size) * CHAR_BIT);
-                size_t offset = atom.size( ) - sizeof(long_t);
-
-                if (insert(1, byte_t(0x80)), this->offs > offset)
-                {
-                    this->insert(this->capacity());
-                }
-
-                this->insert(offset - this->offs).update(length);
-
-                for (size_t i = 0U; i < this->hash.bins(); ++i)
-                {
-                    this->hash[i] = be2h(this->hash[i]);
-                }
-
-                this->offs = BASE;
-                return this->hash;
             }
 
 
@@ -328,6 +281,7 @@ namespace crypto
 
 
         // SHA<256>
+
 
         template<>
         decltype(SHA<256, 224>::SEED) SHA<256, 224>::SEED =

@@ -6,6 +6,7 @@
 #include <openssl/ripemd.h>
 #include "src/number.h"
 #include "src/hasher/sha.h"
+#include "src/hasher/rmd.h"
 
 using namespace crypto;
 typedef void(*test_t)();
@@ -145,10 +146,10 @@ static test_t TESTS[] =
         {
             string += char(rand() % std::numeric_limits<char>::max());
 
-            //TEST((rmd<160>(string)) == rmd160(string));
+            TEST((rmd<160>(string)) == rmd160(string));
         }
 
-        //PERF("RMD160", 10000, (rmd<160>(string)), rmd160(string));
+        PERF("RMD160", 10000, (rmd<160>(string)), rmd160(string));
     },
 
 };
