@@ -67,14 +67,14 @@ namespace crypto
         template<size_t length, typename type_t>
         Number(const Number<length, type_t> &number) : m_data{}
         {
-            memcpy(this->data(), &number, BITS <= length ? size() : number.size());
+            memcpy(this->data(), number.data(), BITS <= length ? size() : number.size());
         }
 
 
         template<class data_t>
         Number(const data_t &object) : m_data{}
         {
-            assert(this->size() >= sizeof(data_t));
+            assert(this->size()        >= sizeof(data_t));
             memcpy(this->data(), &object, sizeof(data_t));
         }
 
@@ -151,7 +151,7 @@ namespace crypto
         {
             size_t remain = rvalue;
 
-            for (size_t i = 0; i < this->bins() && remain; ++i)
+            for (size_t i = 0; i < BINS && remain; ++i)
             {
                 m_data[i] = (word_t)(remain += m_data[i]);
                 remain    = (size_t)(remain >> WORD_BIT);
@@ -183,7 +183,7 @@ namespace crypto
         {
             size_t remain = 0;
 
-            for (size_t i = 0; i < this->bins(); ++i)
+            for (size_t i = 0; i < BINS; ++i)
             {
         	    m_data[i] = (word_t)(remain += m_data[i] * rvalue);
 	            remain    = (size_t)(remain >> WORD_BIT);
@@ -215,7 +215,7 @@ namespace crypto
         {
             size_t remain = 0;
 
-            for (int i = int(this->bins() - 1); i >= 0; --i)
+            for (int i = int(BINS - 1); i >= 0; --i)
             {
                 if ((remain <<= WORD_BIT) += this->m_data[i])
                 {
@@ -273,15 +273,6 @@ namespace crypto
         operator!=(const Number &lvalue, const Number &rvalue)
         {
             return memcmp(lvalue.data(), rvalue.data(), rvalue.size()) != 0;
-        }
-
-
-        // ::insert
-
-        void
-        insert(const size_t &offset, const word_t *record, const size_t &length)
-        {
-            memcpy(this->data() + offset, record, length);
         }
 
 

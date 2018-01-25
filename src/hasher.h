@@ -32,14 +32,18 @@ namespace crypto
     template<size_t BITS, size_t VITS = BITS>
     class Hasher
     {
-        typedef uint8_t byte_t;
-        size_t          m_head;
+        size_t          m_tail;
         size_t          m_size;
+
+
+    protected:
+
+        typedef uint8_t byte_t;
 
 
     public:
 
-        Hasher() : m_head{ 0 }, m_size{ 0 }
+        Hasher() : m_tail{ 0 }, m_size{ 0 }
         {
         }
 
@@ -47,7 +51,7 @@ namespace crypto
         virtual
        ~Hasher()
         {
-            this->m_head = this->m_size = 0;
+            this->m_tail = this->m_size = 0;
         }
 
 
@@ -96,14 +100,14 @@ namespace crypto
         byte_t*
         end()
         {
-            return this->data() + this->m_head;
+            return this->data() + this->m_tail;
         }
 
 
         const byte_t*
         end() const
         {
-            return this->data() + this->m_head;
+            return this->data() + this->m_tail;
         }
 
 
@@ -117,7 +121,7 @@ namespace crypto
         size_t
         reserve() const
         {
-            return this->capacity() - this->m_head;
+            return this->capacity() - this->m_tail;
         }
 
 
@@ -160,12 +164,12 @@ namespace crypto
             while ((volume = this->reserve()) <= remain)
             {
                 memcpy(this->end(), memory, volume);
-                this->m_head = (this->compress(), 0);
+                this->m_tail = (this->compress(), 0);
                 memory += volume; remain -= volume;
             }
 
             memcpy(this->end(), memory, remain);
-            m_head += remain; m_size += length;
+            m_tail += remain; m_size += length;
             return *this;
         }
 
@@ -180,12 +184,12 @@ namespace crypto
             while ((volume = this->reserve()) <= remain)
             {
                 memset(this->end(), record, volume);
-                this->m_head = (this->compress(), 0);
+                this->m_tail = (this->compress(), 0);
                 remain -= volume;
             }
 
             memset(this->end(), record, remain);
-            m_head += remain; m_size += length;
+            m_tail += remain; m_size += length;
             return *this;
         }
 
