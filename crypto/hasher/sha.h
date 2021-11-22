@@ -24,60 +24,20 @@
  */
 
 #pragma once
-#include "../hasher.h"
+#include "crypto/hasher.h"
 
 namespace crypto
 {
-    template<size_t BITS, size_t VITS = BITS> auto
-    sha(const void *record, const size_t &length)
-    {
-        return hasher::SHA<BITS, VITS>().update(record, length).digest();
-    }
-
-
-    template<size_t BITS, size_t VITS = BITS, size_t length> auto
-    sha(const Number<length> &number)
-    {
-        return sha<BITS, VITS>(number.data(), number.size());
-    }
-
-
-    template<size_t BITS, size_t VITS = BITS, class char_t> auto
-    sha(const String<char_t> &string)
-    {
-        return sha<BITS, VITS>(string.data(), string.size());
-    }
-
-
-    template<size_t BITS, size_t VITS = BITS> auto
-    sha(const char *string)
-    {
-        return sha<BITS, VITS>((void*)(string), strlen(string));
-    }
-
-
-    template<size_t BITS, size_t VITS = BITS, class data_t> auto
-    sha(const data_t &object)
-    {
-        return sha<BITS, VITS>((void*)&object, sizeof(data_t));
-    }
-
 
     namespace hasher
     {
-        template<size_t BITS, size_t VITS = BITS>
-        class SHA : public Hasher<BITS, VITS>
-        {
             template<size_t> struct Option;
 
             template<> struct Option<256>
             {
-                enum  : size_t
-                {
-                    STATES = 16,
-                    BLOCKS = 16,
-                    ROUNDS = 64,
-                };
+                static constexpr size_t STATES = 16;
+                static constexpr size_t BLOCKS = 16;
+                static constexpr size_t ROUNDS = 64;
 
                 typedef uint32_t  word_t;
                 typedef uint64_t  long_t;
@@ -85,41 +45,39 @@ namespace crypto
 
             template<> struct Option<512>
             {
-                enum  : size_t
-                {
-                    STATES = 16,
-                    BLOCKS = 16,
-                    ROUNDS = 80,
-                };
+                static constexpr size_t STATES = 16;
+                static constexpr size_t BLOCKS = 16;
+                static constexpr size_t ROUNDS = 80;
 
                 typedef uint64_t  word_t;
                 typedef uint128_t long_t;
             };
 
+        template<size_t BITS, size_t VITS = BITS>
+        class SHA : public Hasher<BITS, VITS>
+        {
 
-            typedef typename Option<BITS>     option;
+            typedef typename crypto::hasher::Option<BITS>     option;
+	    typedef typename Hasher<BITS, VITS>::byte_t byte_t;
             typedef typename option::word_t   word_t;
             typedef typename option::long_t   long_t;
 
-            enum  : size_t
-            {
-                WORD_BIT = sizeof(word_t) * CHAR_BIT,
-                STATES   =            option::STATES,
-                BLOCKS   =            option::BLOCKS,
-                ROUNDS   =            option::ROUNDS,
-            };
+            static constexpr size_t _WORD_BIT = sizeof(word_t) * CHAR_BIT;
+            static constexpr size_t STATES   =            option::STATES;
+            static constexpr size_t BLOCKS   =            option::BLOCKS;
+            static constexpr size_t ROUNDS   =            option::ROUNDS;
 
-            Number<STATES * WORD_BIT, word_t> m_hash;
-            Number<BLOCKS * WORD_BIT, byte_t> m_data;
+            Number<STATES * _WORD_BIT, word_t> m_hash;
+            Number<BLOCKS * _WORD_BIT, byte_t> m_data;
 
 
         public:
 
-            static const Number<STATES * WORD_BIT, word_t> SEED;
-            static const Number<ROUNDS * WORD_BIT, word_t> SALT;
+            static const Number<STATES * _WORD_BIT, word_t> SEED;
+            static const Number<ROUNDS * _WORD_BIT, word_t> SALT;
 
 
-            SHA() : Hasher(), m_hash{SHA::SEED}, m_data{}
+            SHA() : m_hash{SHA::SEED}, m_data{}
             {
             }
 
@@ -163,8 +121,8 @@ namespace crypto
             void
             compress()
             {
-                Number<STATES * WORD_BIT, word_t> states{m_hash};
-                Number<ROUNDS * WORD_BIT, word_t> rounds{m_data};
+                Number<STATES * _WORD_BIT, word_t> states{m_hash};
+                Number<ROUNDS * _WORD_BIT, word_t> rounds{m_data};
 
                 for (size_t i = 0; i < BLOCKS; ++i)
                 {
@@ -210,7 +168,7 @@ namespace crypto
                     this->update(this->reserve(), 0x0);
                 }
 
-                this->update(reserve() - sizeof(long_t), 0x0);
+                this->update(this->reserve() - sizeof(long_t), 0x0);
                 this->update(h2be(long_t(length) * CHAR_BIT));
 
                 for (size_t i = 0; i < STATES; ++i)
@@ -371,4 +329,39 @@ namespace crypto
             0x4CC5D4BECB3E42B6, 0x597F299CFC657E2A, 0x5FCB6FAB3AD6FAEC, 0x6C44198C4A475817,
         };
     }
+
+    template<size_t BITS, size_t VITS = BITS> auto
+    sha(const void *record, const size_t &length)
+    {
+        return crypto::hasher::SHA<BITS, VITS>().update(record, length).digest();
+    }
+
+
+    template<size_t BITS, size_t VITS = BITS, size_t length> auto
+    sha(const Number<length> &number)
+    {
+        return sha<BITS, VITS>(number.data(), number.size());
+    }
+
+
+    template<size_t BITS, size_t VITS = BITS, class char_t> auto
+    sha(const String<char_t> &string)
+    {
+        return sha<BITS, VITS>(string.data(), string.size());
+    }
+
+
+    template<size_t BITS, size_t VITS = BITS> auto
+    sha(const char *string)
+    {
+        return sha<BITS, VITS>((void*)(string), strlen(string));
+    }
+
+
+    template<size_t BITS, size_t VITS = BITS, class data_t> auto
+    sha(const data_t &object)
+    {
+        return sha<BITS, VITS>((void*)&object, sizeof(data_t));
+    }
+
 }

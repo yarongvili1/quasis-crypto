@@ -24,8 +24,8 @@
  */
 
 #pragma once
-#include "number.h"
-#include "string.h"
+#include "crypto/number.h"
+#include "crypto/string.h"
 
 namespace crypto
 {
@@ -227,7 +227,7 @@ namespace crypto
 
 
     uint32_t
-    rotl(const uint32_t &number, const int &length)
+    inline rotl(const uint32_t &number, const int &length)
     {
         #if defined(_WIN32)
             return _lrotl(number, length);
@@ -238,7 +238,7 @@ namespace crypto
 
 
     uint64_t
-    rotl(const uint64_t &number, const int &length)
+    inline rotl(const uint64_t &number, const int &length)
     {
         #if defined(_WIN32)
             return _rotl64(number, length);
@@ -252,7 +252,7 @@ namespace crypto
 
 
     uint32_t
-    rotr(const uint32_t &number, const int &length)
+    inline rotr(const uint32_t &number, const int &length)
     {
         #if defined(_WIN32)
             return _lrotr(number, length);
@@ -263,7 +263,7 @@ namespace crypto
 
 
     uint64_t
-    rotr(const uint64_t &number, const int &length)
+    inline rotr(const uint64_t &number, const int &length)
     {
         #if defined(_WIN32)
             return _rotr64(number, length);

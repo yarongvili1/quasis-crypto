@@ -24,7 +24,7 @@
  */
 
 #pragma once
-#include <string>
+#include <string.h>
 
 namespace crypto
 {
@@ -38,4 +38,4 @@ namespace crypto
     const String<> BASE32 = "0123456789ABCDEFGHJKMNPQRTUVWXYZ";
     const String<> BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
     const String<> BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-};
+}

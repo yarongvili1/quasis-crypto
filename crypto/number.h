@@ -24,24 +24,22 @@
  */
 
 #pragma once
+#include <climits>
 #include <assert.h>
 #include <initializer_list>
-#include "string.h"
+#include "crypto/string.h"
 
 namespace crypto
 {
     template<size_t BITS, typename word_t = uint8_t>
     class Number
     {
-        enum : size_t
-        {
-            WORD_BIT = CHAR_BIT * sizeof(word_t),
-            BINS     = (size_t)(BITS / WORD_BIT),
-            SIZE     = (size_t)(BITS / CHAR_BIT),
-        };
+        static constexpr size_t _WORD_BIT = CHAR_BIT * sizeof(word_t);
+        static constexpr size_t BINS     = (size_t)(BITS / _WORD_BIT);
+        static constexpr size_t SIZE     = (size_t)(BITS / CHAR_BIT);
 
         word_t              m_data [BINS];
-        static inline const Number ZERO{};
+        //static inline const Number ZERO{};
 
 
      public:
@@ -154,7 +152,7 @@ namespace crypto
             for (size_t i = 0; i < BINS && remain; ++i)
             {
                 m_data[i] = (word_t)(remain += m_data[i]);
-                remain    = (size_t)(remain >> WORD_BIT);
+                remain    = (size_t)(remain >> _WORD_BIT);
             }
 
             return *this;
@@ -186,7 +184,7 @@ namespace crypto
             for (size_t i = 0; i < BINS; ++i)
             {
         	    m_data[i] = (word_t)(remain += m_data[i] * rvalue);
-	            remain    = (size_t)(remain >> WORD_BIT);
+	            remain    = (size_t)(remain >> _WORD_BIT);
             }
 
             return *this;
@@ -217,7 +215,7 @@ namespace crypto
 
             for (int i = int(BINS - 1); i >= 0; --i)
             {
-                if ((remain <<= WORD_BIT) += this->m_data[i])
+                if ((remain <<= _WORD_BIT) += this->m_data[i])
                 {
                     m_data[i] = (word_t)(remain / rvalue);
                     remain    = (size_t)(remain % rvalue);
@@ -252,7 +250,12 @@ namespace crypto
         bool
         operator!() const
         {
-            return memcmp(this->data(), ZERO.data(), this->size()) == 0;
+	    bool r = true;
+	    for (int i=0; i<BINS; i++) {
+		r &= m_data[i] == 0;
+	    }
+	    return r;
+            //return memcmp(this->data(), ZERO.data(), this->size()) == 0;
         }
 
 
@@ -327,14 +330,14 @@ namespace crypto
 
 
     uint8_t
-    swap(const uint8_t &number)
+    inline swap(const uint8_t &number)
     {
         return number;
     }
 
 
     uint16_t
-    swap(const uint16_t &number)
+    inline swap(const uint16_t &number)
     {
         #if defined(_WIN32)
             return _byteswap_ushort( number );
@@ -347,7 +350,7 @@ namespace crypto
 
 
     uint32_t
-    swap(const uint32_t &number)
+    inline swap(const uint32_t &number)
     {
         #if defined(_WIN32)
             return _byteswap_ulong( number );
@@ -360,7 +363,7 @@ namespace crypto
 
 
     uint64_t
-    swap(const uint64_t &number)
+    inline swap(const uint64_t &number)
     {
         #if defined(_WIN32)
             return _byteswap_uint64( number );
@@ -373,7 +376,7 @@ namespace crypto
 
 
     template<size_t BITS, typename word_t> Number<BITS, word_t>
-    swap(const Number<BITS, word_t> &number)
+    inline swap(const Number<BITS, word_t> &number)
     {
         Number<BITS, word_t> result;
 

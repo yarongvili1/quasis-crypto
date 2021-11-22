@@ -24,7 +24,7 @@
  */
 
 #pragma once
-#include "../hasher.h"
+#include "crypto/hasher.h"
 
 namespace crypto
 {
@@ -90,20 +90,20 @@ namespace crypto
 
             enum  : size_t
             {
-                WORD_BIT = sizeof(word_t) * CHAR_BIT,
+                _WORD_BIT = sizeof(word_t) * CHAR_BIT,
                 STATES   =            option::STATES,
                 BLOCKS   =            option::BLOCKS,
                 ROUNDS   =            option::ROUNDS,
             };
 
-            Number<STATES * WORD_BIT, word_t> m_hash;
-            Number<BLOCKS * WORD_BIT, byte_t> m_data;
+            Number<STATES * _WORD_BIT, word_t> m_hash;
+            Number<BLOCKS * _WORD_BIT, byte_t> m_data;
 
 
         public:
 
-            static const Number<STATES * WORD_BIT, word_t> SEED;
-            static const Number<ROUNDS * WORD_BIT, word_t> SALT;
+            static const Number<STATES * _WORD_BIT, word_t> SEED;
+            static const Number<ROUNDS * _WORD_BIT, word_t> SALT;
             static const int               OFFS[ROUNDS][BLOCKS];
             static const int               SIZE[ROUNDS][BLOCKS];
 
@@ -152,9 +152,9 @@ namespace crypto
             void
             compress()
             {
-                Number<STATES * WORD_BIT, word_t> lstate{m_hash};
-                Number<STATES * WORD_BIT, word_t> rstate{m_hash};
-                Number<BLOCKS * WORD_BIT, word_t> blocks{m_data};
+                Number<STATES * _WORD_BIT, word_t> lstate{m_hash};
+                Number<STATES * _WORD_BIT, word_t> rstate{m_hash};
+                Number<BLOCKS * _WORD_BIT, word_t> blocks{m_data};
                 word_t buffer{};
 
                 for (size_t i = 0; i < BLOCKS; ++i)
